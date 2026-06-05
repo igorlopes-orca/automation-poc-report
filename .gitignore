@@ -1,0 +1,12 @@
+.env
+output/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.uv/
+.ruff_cache/
+.DS_Store
+
+# PowerPoint lock files
+~$*.pptx

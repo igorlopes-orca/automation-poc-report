@@ -1,0 +1,18 @@
+[project]
+name = "automation-poc-report"
+version = "0.1.0"
+description = "Generate Orca POC recap decks from tenant data (PT/ES)"
+requires-python = ">=3.11"
+dependencies = [
+    "python-pptx>=1.0.2",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.1",
+    "typer>=0.12.5",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
