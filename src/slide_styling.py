@@ -60,6 +60,8 @@ SLIDE_STYLING: dict[int, SlideStyling] = {
     8: SlideStyling(red_paragraphs=[5, 6]),
     # Slide 9 — Top Findings. First two findings red.
     9: SlideStyling(red_paragraphs=[2, 3]),
+    # Slide 10 — AppSec. First two findings red.
+    10: SlideStyling(red_paragraphs=[6, 7]),
 }
 
 

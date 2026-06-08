@@ -105,6 +105,22 @@ SLIDE_CONFIG: dict[int, dict] = {
             ],
         },
     },
+    10: {
+        "bullets": {
+            "pt": [
+                "{{metrics.appsec.critical_alerts}} alertas críticos identificados em {{metrics.appsec.repos_with_critical}} repositórios",
+                "{{metrics.appsec.high_alerts}} alertas altos identificados em {{metrics.appsec.repos_with_high}} repositórios",
+                "{{metrics.appsec.sensitive_crit_high_alerts}} alertas de dados sensíveis críticos e altos identificados em {{metrics.appsec.repos_with_sensitive_crit_high}} repositórios",
+                "{{metrics.appsec.repos_with_deployed_assets}} repositórios com recursos de infraestrutura mapeados com ambiente de produção",
+            ],
+            "es": [
+                "{{metrics.appsec.critical_alerts}} alertas críticas identificadas en {{metrics.appsec.repos_with_critical}} repositorios",
+                "{{metrics.appsec.high_alerts}} alertas altas identificadas en {{metrics.appsec.repos_with_high}} repositorios",
+                "{{metrics.appsec.sensitive_crit_high_alerts}} alertas de datos sensibles críticas y altas identificadas en {{metrics.appsec.repos_with_sensitive_crit_high}} repositorios",
+                "{{metrics.appsec.repos_with_deployed_assets}} repositorios con recursos de infraestructura asignados a un entorno de producción",
+            ],
+        },
+    },
 }
 
 

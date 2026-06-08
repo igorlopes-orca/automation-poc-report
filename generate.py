@@ -57,11 +57,13 @@ def _fetch_metrics():
         iam = client.get_identity_metrics()
         findings = client.get_findings_metrics()
         compliance = client.get_compliance_metrics()
+        appsec = client.get_appsec_metrics()
     counts = {
         "vuln": vuln.as_dict(),
         "assets": assets.as_dict(),
         "iam": iam.as_dict(),
         "findings": findings.as_dict(),
+        "appsec": appsec.as_dict(),
     }
     return counts, compliance
 

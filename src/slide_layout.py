@@ -15,4 +15,5 @@ BULLET_START_IDX: dict[int, int] = {
     7: 6,  # Identity & Access — bullets follow "Top Findings:" header (P5)
     8: 5,  # Cloud Compliance — bullets follow "Customer Compliance:" header
     9: 2,  # Top Findings — bullets follow "Alertas de maior risco" subtitle
+    10: 6,  # AppSec — bullets follow "Top Findings:" header (P5)
 }

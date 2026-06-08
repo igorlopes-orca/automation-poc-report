@@ -159,6 +159,28 @@ class ComplianceMetrics:
 
 
 @dataclass
+class AppSecMetrics:
+    critical_alerts: int
+    repos_with_critical: int
+    high_alerts: int
+    repos_with_high: int
+    sensitive_crit_high_alerts: int
+    repos_with_sensitive_crit_high: int
+    repos_with_deployed_assets: int
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "critical_alerts": self.critical_alerts,
+            "repos_with_critical": self.repos_with_critical,
+            "high_alerts": self.high_alerts,
+            "repos_with_high": self.repos_with_high,
+            "sensitive_crit_high_alerts": self.sensitive_crit_high_alerts,
+            "repos_with_sensitive_crit_high": self.repos_with_sensitive_crit_high,
+            "repos_with_deployed_assets": self.repos_with_deployed_assets,
+        }
+
+
+@dataclass
 class FindingsMetrics:
     crit_high_exposed_sensitive: int
     dspm_crit_high: int
@@ -372,6 +394,49 @@ class OrcaClient:
             ),
         )
 
+    # ---------- Slide 10: AppSec ----------
+
+    def get_appsec_metrics(self) -> AppSecMetrics:
+        # AppSec alerts are tagged with the ``source:shiftleft`` label.
+        # Slide bullets split by RiskLevel: bullet 1 = critical only,
+        # bullet 2 = high only, bullet 3 = crit+high in data-protection
+        # categories.
+        def appsec_open(risk_levels: list[str]) -> dict:
+            return _and(
+                _any_match("Labels", _in("Labels", ["source:shiftleft"])),
+                _in("Status", ["open", "in_progress"]),
+                _in("RiskLevel", risk_levels),
+            )
+
+        appsec_critical = appsec_open(["critical"])
+        appsec_high = appsec_open(["high"])
+        appsec_sensitive_open_crit_high = _and(
+            appsec_open(["critical", "high"]),
+            _in("Category", ["Data at risk", "Data protection"]),
+        )
+        return AppSecMetrics(
+            critical_alerts=self.count("Alert", appsec_critical),
+            repos_with_critical=self.count(
+                "Inventory",
+                _has("Alert", appsec_critical, key="Alerts", set_=True),
+            ),
+            high_alerts=self.count("Alert", appsec_high),
+            repos_with_high=self.count(
+                "Inventory",
+                _has("Alert", appsec_high, key="Alerts", set_=True),
+            ),
+            sensitive_crit_high_alerts=self.count("Alert", appsec_sensitive_open_crit_high),
+            repos_with_sensitive_crit_high=self.count(
+                "Inventory",
+                _has("Alert", appsec_sensitive_open_crit_high, key="Alerts", set_=True),
+            ),
+            repos_with_deployed_assets=self.count(
+                "CodeRepository",
+                _any_match("Observations", _in("Observations", ["deployed_assets"])),
+                order_by=["-OrcaScore"],
+            ),
+        )
+
     # ---------- Slide 8: Compliance ----------
 
     def get_compliance_metrics(self) -> ComplianceMetrics:
@@ -401,6 +466,16 @@ def _eq(key: str, value, *, type_: str = "str") -> dict:
 
 def _and(*clauses: dict) -> dict:
     return {"operator": "and", "type": "operation", "values": list(clauses)}
+
+
+def _any_match(key: str, sub_filter: dict) -> dict:
+    """List-membership filter: at least one element of ``key`` matches ``sub_filter``."""
+    return {
+        "key": key,
+        "values": [sub_filter],
+        "type": "list",
+        "operator": "any_match",
+    }
 
 
 def _has(
