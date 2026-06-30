@@ -1,13 +1,26 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
 
 SERVING_LAYER_PATH = "/api/serving-layer/query"
 COMPLIANCE_FRAMEWORKS_PATH = "/api/serving-layer/compliance/frameworks/overview"
+
+# Serving-layer rate-limiting: the endpoint returns 429 when we fan out
+# the ~two dozen count() calls a single run makes. Retry on 429, honoring
+# the server's Retry-After header when present and falling back to
+# exponential backoff otherwise. Capped so a genuinely throttled tenant
+# fails loudly instead of hanging.
+RETRY_STATUS_CODES = frozenset({429, 503})
+MAX_RETRIES = 5
+BACKOFF_BASE_SECONDS = 1.0
+MAX_BACKOFF_SECONDS = 30.0
 
 
 # The full set of standard alert categories. Used by slide-9 query 1
@@ -231,14 +244,36 @@ class OrcaClient:
     # ---------- Low-level HTTP plumbing ----------
 
     def _post(self, path: str, body: dict) -> dict:
-        response = self._client.post(self._base_url + path, json=body)
-        response.raise_for_status()
+        response = self._request_with_retry("POST", path, json=body)
         return response.json()
 
     def _get(self, path: str, params: dict | None = None) -> dict:
-        response = self._client.get(self._base_url + path, params=params)
-        response.raise_for_status()
+        response = self._request_with_retry("GET", path, params=params)
         return response.json()
+
+    def _request_with_retry(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Send a request, retrying on rate-limit / transient statuses.
+
+        On 429 (or 503) we wait for the server's ``Retry-After`` header
+        when present, otherwise exponential backoff, up to ``MAX_RETRIES``
+        attempts. Any other error status raises immediately.
+        """
+        url = self._base_url + path
+        for attempt in range(MAX_RETRIES + 1):
+            response = self._client.request(method, url, **kwargs)
+            if response.status_code in RETRY_STATUS_CODES and attempt < MAX_RETRIES:
+                self._sleep_before_retry(response, attempt)
+                continue
+            response.raise_for_status()
+            return response
+        # Unreachable: the loop either returns or raises on the last attempt.
+        raise RuntimeError("retry loop exited without a response")
+
+    def _sleep_before_retry(self, response: httpx.Response, attempt: int) -> None:
+        retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+        if retry_after is None:
+            retry_after = min(BACKOFF_BASE_SECONDS * (2 ** attempt), MAX_BACKOFF_SECONDS)
+        time.sleep(retry_after)
 
     # ---------- Serving-layer count primitive ----------
 
@@ -452,6 +487,34 @@ class OrcaClient:
                 for fw in data.get("frameworks", [])
             ],
         )
+
+
+# ---------- HTTP helpers ----------
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse a ``Retry-After`` header into seconds to wait.
+
+    Supports the two RFC 7231 forms: a non-negative integer count of
+    seconds, or an HTTP-date. Returns None when the header is absent or
+    unparseable so the caller can fall back to exponential backoff.
+    """
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    delta = (parsed - datetime.now(timezone.utc)).total_seconds()
+    return max(0.0, delta)
 
 
 # ---------- Filter DSL helpers ----------
