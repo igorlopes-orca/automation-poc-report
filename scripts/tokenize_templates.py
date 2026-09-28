@@ -9,6 +9,10 @@ Per slide entry:
   some slides build their bullet block dynamically at fill time
   (e.g. slide 8 compliance frameworks); for those, omit ``bullets`` and
   only the link-stripping pass runs.
+- ``header``: per-language ``{paragraph_idx: text}`` map for static
+  header paragraphs (the bold label + body above "Top Findings:").
+  Optional — used where the template was duplicated from another slide
+  and its header copy needs to be corrected here rather than by hand.
 
 The ``BULLET_START_IDX`` for each slide lives in ``src.slide_layout``
 so the runtime filler stays in sync with the template prep step.
@@ -25,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from pptx import Presentation  # noqa: E402
 
-from src.pptx_filler import rewrite_bullet_block  # noqa: E402
+from src.pptx_filler import _first_text_frame, rewrite_bullet_block  # noqa: E402
 from src.slide_layout import BULLET_START_IDX  # noqa: E402
 
 TEMPLATES = ROOT / "templates"
@@ -106,6 +110,19 @@ SLIDE_CONFIG: dict[int, dict] = {
         },
     },
     10: {
+        # This deck's AppSec slide was duplicated from slide 7 (CIEM) and
+        # kept its least-privilege header copy. Overwrite P2/P3 with the
+        # AppSec (shift-left) description; bullets P6-P9 are already correct.
+        "header": {
+            "pt": {
+                2: "Segurança shift-left:",
+                3: "Identifique vulnerabilidades no código, IaC e dependências antes de chegarem à produção, e priorize os repositórios de maior risco.",
+            },
+            "es": {
+                2: "Seguridad shift-left:",
+                3: "Identifique vulnerabilidades en el código, IaC y dependencias antes de que lleguen a producción, y priorice los repositorios de mayor riesgo.",
+            },
+        },
         "bullets": {
             "pt": [
                 "{{metrics.appsec.critical_alerts}} alertas críticos identificados em {{metrics.appsec.repos_with_critical}} repositórios",
@@ -134,11 +151,26 @@ def _strip_hyperlinks(slide) -> None:
                     run.hyperlink.address = None
 
 
+def _rewrite_header(slide, replacements: dict[int, str]) -> None:
+    """Overwrite static header paragraphs by index, preserving each
+    paragraph's existing font (collapse into the first run)."""
+    paragraphs = list(_first_text_frame(slide).paragraphs)
+    for idx, text in replacements.items():
+        runs = paragraphs[idx].runs
+        if not runs:
+            raise RuntimeError(f"Header paragraph {idx} has no runs; cannot rewrite.")
+        runs[0].text = text
+        for run in runs[1:]:
+            run._r.getparent().remove(run._r)
+
+
 def _apply_to_template(template_path: Path, lang: str) -> None:
     prs = Presentation(str(template_path))
     for slide_num, cfg in SLIDE_CONFIG.items():
         slide = prs.slides[slide_num - 1]
         _strip_hyperlinks(slide)
+        if "header" in cfg:
+            _rewrite_header(slide, cfg["header"][lang])
         if "bullets" in cfg:
             rewrite_bullet_block(slide, BULLET_START_IDX[slide_num], cfg["bullets"][lang])
     prs.save(str(template_path))
