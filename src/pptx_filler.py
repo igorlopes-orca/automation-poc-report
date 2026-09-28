@@ -92,17 +92,25 @@ def rewrite_bullet_block(slide, bullet_start_idx: int, bullets: list[str]) -> No
     tf = _first_text_frame(slide)
     paragraphs = list(tf.paragraphs)
 
-    current = len(paragraphs) - bullet_start_idx
+    # Trailing run-less paragraphs (PowerPoint's end-of-frame spacer) are
+    # not part of the block: they can't be rewritten and shouldn't be cloned.
+    block_end = len(paragraphs)
+    while block_end > bullet_start_idx and not paragraphs[block_end - 1].runs:
+        block_end -= 1
+    if block_end == bullet_start_idx:
+        raise RuntimeError("Bullet block has no run-bearing paragraph to use as a template.")
+
+    current = block_end - bullet_start_idx
     target = len(bullets)
 
     if current < target:
-        template_p = paragraphs[-1]._p
+        template_p = paragraphs[block_end - 1]._p
         for _ in range(target - current):
             clone = deepcopy(template_p)
             template_p.addnext(clone)
             template_p = clone
     elif current > target:
-        for paragraph in paragraphs[bullet_start_idx + target :]:
+        for paragraph in paragraphs[bullet_start_idx + target : block_end]:
             paragraph._p.getparent().remove(paragraph._p)
 
     paragraphs = list(tf.paragraphs)
